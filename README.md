@@ -120,7 +120,7 @@ cifrado en un fichero binario aparte (uno por archivo, dentro de
 `data/cifrados/`) y dejar en `archivos.txt` solo la ruta a ese
 fichero en vez del contenido completo.
 
-## Ampliación futura: volver a base de datos o añadir GUI
+## Ampliación futura: Añadir GUI
 
 Como la lógica criptográfica vive en `crypto/` y es independiente del
 almacenamiento, si más adelante quieres volver a MySQL (o cualquier
