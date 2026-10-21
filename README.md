@@ -137,24 +137,6 @@ El programa muestra un menú:
 Al salir y volver a entrar, el usuario y los archivos cifrados siguen ahí,
 porque todo quedó persistido en `data/usuarios.txt` y `data/archivos.txt`.
 
-## Por qué CTR en vez de CBC
-
-El PDF no especifica el modo de operación de AES, solo dice "AES128".
-Este proyecto usa **CTR (Counter mode)**:
-
-- AES no cifra el archivo directamente: cifra un contador (el IV de
-  16 bytes es el valor inicial de ese contador) y el resultado se
-  combina con el texto claro mediante XOR, byte a byte.
-- No necesita padding: el archivo puede tener cualquier longitud,
-  no hace falta rellenarlo hasta un múltiplo de 16 bytes como en CBC.
-- Es paralelizable y permite acceso aleatorio al contenido cifrado
-  (se podría descifrar solo un trozo del archivo sin descifrar todo
-  lo anterior), algo que CBC no permite con la misma facilidad.
-- Requisito importante: el par (clave, IV) nunca debe reutilizarse
-  para cifrar dos datos distintos. Por eso `generarIv()` genera
-  siempre un IV nuevo y aleatorio (con `SecureRandom`) en cada
-  cifrado, tanto de archivos como de la clave privada del usuario.
-
 ## Ciclo de vida de un archivo
 
 ```
