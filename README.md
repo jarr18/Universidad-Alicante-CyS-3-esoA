@@ -1,170 +1,137 @@
-# Práctica Fase I — Compresión y Seguridad (versión sin base de datos)
+# Servicio seguro de contenidos multimedia — Fase II
+Compresión y Seguridad 2026-2027 · Universidad de Alicante
 
-Versión simplificada del proyecto: **sin MySQL ni ninguna dependencia
-externa**. Todo se guarda en dos ficheros de texto plano dentro de la
-carpeta `data/`, que se crea automáticamente la primera vez que
-ejecutas el programa.
+Sistema **cliente–servidor** para guardar archivos multimedia cifrados, con usuarios, segundo factor (2FA) y compartición segura entre usuarios. Hecho en **Java 17+**, interfaz **Swing**, servidor con `com.sun.net.httpserver` y **sin librerías externas**.
 
-- `data/usuarios.txt` → el usuario único de la Fase I (una línea)
-- `data/archivos.txt` → un archivo cifrado por línea (registro y clave
-  protegida; el contenido cifrado va en un fichero `.enc` aparte)
+## 1. Contenido del proyecto
 
-Los datos binarios (claves, IVs) se guardan
-codificados en **Base64** dentro de cada línea, separados por `|`.
-Nada se guarda nunca en claro salvo el nombre de usuario y el nombre
-del archivo.
+| Carpeta / archivo | Descripción |
+|---|---|
+| `servidor/` | Servidor REST (separado del cliente): usuarios, JWT, 2FA, almacén de blobs cifrados |
+| `cliente/` | Aplicación de escritorio (Swing) y toda la criptografía de cliente |
+| `comun/` | JSON mínimo compartido por ambos |
+| `pruebas/` | Prueba de integración automática (39 comprobaciones) y generador de capturas |
+| `docs/SEGURIDAD.md` | Capítulo de seguridad con la notación explicada |
+| `docs/capturas/` | Capturas reales de la aplicación |
+| `fase1/` | Código de la Fase I (un solo usuario) |
+| `*.bat` / `*.sh` | Scripts para compilar y ejecutar (Windows / Linux-macOS) |
 
-## Usuario único (Fase I)
+## 2. Instalación y arranque (Windows)
 
-Según el enunciado, en la Fase I no hace falta gestionar varios
-usuarios: basta **un usuario y un password** para entrar al programa. El
-alta y la autenticación de múltiples usuarios (y compartir archivos
-entre ellos) corresponden a la Fase II.
+Necesitas un **JDK 17 o superior** (comando `javac`). Dentro de la carpeta del proyecto:
 
-Por eso **no existe opción de registro**, ni en la consola ni en la
-interfaz gráfica. El usuario se crea automáticamente la primera vez que
-se arranca el programa (se genera su par de claves RSA y se protege la
-clave privada con su password). Las credenciales son:
+1. **Servidor**: doble clic en `ejecutar-servidor.bat`. La primera vez compila y genera un certificado TLS (`certs/`). Déjalo abierto: debe mostrar `Escuchando en https://0.0.0.0:8443/api`.
+2. **Cliente**: doble clic en `ejecutar-cliente.bat` (puedes abrir varios para probar con varios usuarios).
+3. **Pruebas automáticas** (opcional): `ejecutar-pruebas.bat`.
 
-| Usuario   | Password   |
-|-----------|------------|
-| `usuario` | `clave123` |
+En Linux/macOS: `sh ejecutar-servidor.sh`, `sh ejecutar-cliente.sh`, `sh ejecutar-pruebas.sh`. Los datos del servidor quedan en `datos-servidor/`.
+Si el servidor está en otro equipo, copia `certs/truststore.p12` junto al cliente y escribe `https://IP-del-servidor:8443` en la pantalla de acceso.
 
-Se definen como constantes `USUARIO` y `PASSWORD_INICIAL` en
-`service/CifradoService.java`. Para usar otro password, cámbialo ahí
-**antes de la primera ejecución** (o borra la carpeta `data/` y vuelve a
-arrancar; ten en cuenta que así se pierde también el registro de los
-archivos ya cifrados).
+## 3. Manual de usuario
 
-## Lógica implementada (según el diagrama del PDF)
+### 3.1 Crear una cuenta e iniciar sesión
+![Pantalla de acceso](docs/capturas/01-acceso.png)
 
-- Cada archivo `f_i` se cifra con una clave AES-128 propia `k_fi`:
-  `E^AES_{k_fi}(f_i) = c_i`
-- Esa clave `k_fi` se protege cifrándola con la clave pública RSA del
-  usuario: `E^RSA_{Ku}(k_fi)`
-- La clave privada RSA del usuario `k_u` se protege cifrándola con
-  AES-128, usando como clave el hash `SHA3-256(p_u)` del password del
-  usuario, truncado a 128 bits: `E^AES_{SHA3-256(p_u)}(k_u)`
-- El password **nunca se guarda**, ni siquiera su hash: solo se usa
-  para derivar la clave AES en el momento (creación del usuario / login).
-  El login se valida indirectamente: si el descifrado de la clave privada
-  tiene éxito, el password era correcto.
+1. Comprueba que **Servidor** es la dirección del servidor (por defecto `https://localhost:8443`).
+2. Escribe un **usuario** (3-32 caracteres: letras, números, `.`, `_`, `-`) y una **contraseña de al menos 8 caracteres**.
+3. Pulsa **Crear cuenta** (tarda unos segundos: se generan tus claves). Después pulsa **Iniciar sesión**.
 
-## Estructura del proyecto
+> ⚠️ **Apunta bien tu contraseña.** No existe «recuperar contraseña»: tus archivos están cifrados con claves protegidas por ella y nadie, ni el servidor, puede abrirlos sin ella.
 
+### 3.2 Pantalla principal
+![Ventana principal](docs/capturas/02-principal.png)
+
+La tabla muestra tus archivos y los que otros usuarios han compartido contigo. Con un archivo seleccionado:
+
+| Botón | Qué hace |
+|---|---|
+| **Subir y cifrar…** | Elige uno o varios archivos. Se cifran **en tu equipo** y solo se sube el contenido cifrado. Al terminar puedes borrar los originales |
+| **Abrir** (o doble clic) | Descifra una copia temporal y la abre con el programa del sistema (reproductor, visor…). La copia se borra al cerrar sesión |
+| **Descargar y descifrar…** | Guarda el archivo descifrado en la carpeta que elijas |
+| **Compartir…** | Da acceso a otro usuario (solo si el archivo es tuyo) |
+| **Dejar de compartir…** | Retira el acceso a un usuario |
+| **Eliminar** | Borra el archivo del servidor (si es tuyo) o lo quita de tu lista (si te lo compartieron) |
+| **Seguridad (2FA)…** | Activa o desactiva el segundo factor |
+| **Cerrar sesión** | Sale y borra las copias temporales |
+
+### 3.3 Compartir un archivo
+![Compartir](docs/capturas/03-compartir.png)
+
+Selecciona tu archivo → **Compartir…** → elige al usuario. El archivo **no se vuelve a cifrar ni a subir**: solo se entrega al destinatario la clave del archivo protegida con *su* clave pública. El destinatario lo verá en su lista:
+
+![Archivo recibido](docs/capturas/06-recibido.png)
+
+### 3.4 Activar el segundo factor (2FA)
+![Seguridad](docs/capturas/04-seguridad.png)
+
+1. Pulsa **Seguridad (2FA)…** → **Sí**.
+2. En tu app de autenticación (Google Authenticator, Authy, Microsoft Authenticator…) añade una cuenta **manualmente** con la clave que aparece.
+3. Escribe el código de 6 dígitos y pulsa **Aceptar**.
+
+![Activar 2FA](docs/capturas/05-activar-2fa.png)
+
+Desde ese momento, al iniciar sesión se te pedirá también el código. Para desactivarlo, vuelve a **Seguridad (2FA)…** e introduce un código.
+
+### 3.5 Problemas habituales
+| Mensaje | Causa y solución |
+|---|---|
+| «No se pudo conectar con el servidor» | El servidor no está arrancado o la dirección es incorrecta |
+| «Usuario o contraseña incorrectos» | Revisa ambos datos; tras 5 fallos hay que esperar 1 minuto |
+| «La sesión ha caducado» | Han pasado más de 30 min sin actividad: inicia sesión de nuevo |
+| Error de certificado | Ejecuta el cliente con `ejecutar-cliente.bat` (usa el almacén `certs/truststore.p12`) |
+
+*(Las capturas se generaron en un entorno de pruebas; el aspecto de las ventanas puede variar según el sistema operativo.)*
+
+## 4. Implementación
+
+### 4.1 Arquitectura
 ```
-practica-fase1-proto/
-├── ejecutar-gui.bat / ejecutar-consola.bat   # compilar y lanzar en Windows
-└── src/
-    ├── MainGui.java                 # Punto de entrada de la interfaz gráfica
-    ├── Main.java                    # Punto de entrada de la consola (menú)
-    ├── gui/
-    │   └── VentanaPrincipal.java    # Interfaz Swing (login + gestión de archivos)
-    ├── service/
-    │   └── CifradoService.java      # Lógica: usuario único, login, cifrar, descifrar
-    ├── crypto/
-    │   ├── AesUtil.java             # AES-128 CTR (sin padding)
-    │   ├── RsaUtil.java             # RSA-2048
-    │   └── HashUtil.java            # SHA3-256 (nativo desde Java 9, sin librerías)
-    ├── model/
-    │   ├── Usuario.java
-    │   └── ArchivoCifrado.java
-    └── storage/
-        ├── UsuarioRepository.java   # Lee/escribe data/usuarios.txt
-        └── ArchivoRepository.java   # Lee/escribe data/archivos.txt
-```
-
-La consola (`Main`) y la interfaz gráfica (`gui`) son solo capas de
-presentación: las dos delegan en `CifradoService`, que es donde vive toda
-la lógica. Así el comportamiento es idéntico en ambas.
-
-## Compilar y ejecutar
-
-Solo necesitas un **JDK 17 o superior** (no hace falta Maven ni ninguna
-librería: la interfaz usa Swing, que viene con el JDK).
-
-**Windows:** doble clic en `ejecutar-gui.bat` (interfaz gráfica) o
-`ejecutar-consola.bat` (consola).
-
-**A mano** (Linux/macOS/Windows):
-
-```bash
-javac -encoding UTF-8 -sourcepath src -d out src/MainGui.java src/Main.java
-
-java -cp out MainGui     # interfaz gráfica
-java -cp out Main        # consola
-```
-
-## Uso
-
-### Interfaz gráfica
-
-1. Escribe el usuario y el password (ver tabla de credenciales arriba) y
-   pulsa **Iniciar sesión** (también con Enter). La primera vez que se
-   arranca el programa puede tardar un instante, porque se generan las
-   claves RSA del usuario.
-2. En la pantalla principal verás la lista de tus archivos cifrados:
-   - **Cifrar archivo(s)…**: eliges uno o varios archivos; tras confirmar,
-     cada uno se sustituye por su `.enc` y el original se elimina.
-   - **Descifrar seleccionado**: eliges la fila y si restaurarlo en la
-     misma carpeta o en otra. El `.enc` y su clave se eliminan.
-   - **Actualizar** recarga la lista y **Cerrar sesión** vuelve al login.
-3. Las operaciones lentas (cifrar ficheros grandes) se hacen en segundo
-   plano y los botones se bloquean mientras tanto.
-
-### Consola
-
-El programa muestra un menú:
-
-1. **Iniciar sesión**: pide usuario y password y comprueba el password
-   intentando descifrar la clave privada; si falla, indica "Password
-   incorrecto".
-2. **Cifrar archivo**: pide la ruta de un archivo, genera `k_fi`, lo
-   cifra y escribe el resultado como `nombre.enc` **en la misma carpeta**
-   (cambia la extensión; si ya existe un `.enc` con ese nombre usa
-   `nombre_2.enc`, etc.). La clave protegida `E^RSA_Ku(k_fi)` se registra
-   en `archivos.txt` y **el archivo original se elimina**.
-3. **Descifrar archivo**: recupera `k_fi` con la clave privada de la
-   sesión, restaura el archivo original (por defecto en la carpeta del
-   `.enc`, o en la que indiques; no sobrescribe si ya existe) y a
-   continuación **elimina el `.enc` y borra de `archivos.txt` la clave
-   protegida**. Ese archivo deja de estar disponible para descifrar:
-   para volver a hacerlo hay que cifrarlo de nuevo (se genera una
-   `k_fi` nueva).
-4. **Listar mis archivos cifrados** (los que siguen pendientes de descifrar).
-5. **Cerrar sesión**.
-
-Al salir y volver a entrar, el usuario y los archivos cifrados siguen ahí,
-porque todo quedó persistido en `data/usuarios.txt` y `data/archivos.txt`.
-
-## Ciclo de vida de un archivo
-
-```
-foto.jpg --(cifrar)--> foto.enc  + registro con E^RSA_Ku(k_f) en archivos.txt   [original borrado]
-foto.enc --(descifrar)--> foto.jpg                                              [.enc y registro borrados]
+ Cliente (Swing)                          Servidor (REST/JSON sobre HTTPS)
+ ┌────────────────────┐   JWT en cabecera ┌──────────────────────────────┐
+ │ gui/               │ ────────────────► │ Api.java  (rutas y permisos) │
+ │ ClienteServicio    │                   │ Jwt, Totp, Cripto            │
+ │ crypto/Cripto      │ ◄──────────────── │ Database (db.json + blobs/)  │
+ │ net/ApiClient      │                   └──────────────────────────────┘
+ └────────────────────┘
+ Todo el cifrado y descifrado ocurre en el cliente. El servidor solo ve datos opacos.
 ```
 
-Borrar el registro al descifrar es lo que hace efectivo el "un solo uso":
-aunque alguien conservase una copia del `.enc`, sin `E^RSA_Ku(k_f)` ya no
-existe forma de recuperar `k_f`.
+### 4.2 API REST
+| Método y ruta | Auth | Descripción |
+|---|---|---|
+| `GET /api/auth/sal?usuario=` | – | Sal e iteraciones del PBKDF |
+| `POST /api/auth/registro` | – | Alta (sal, mitad de autenticación, clave pública y clave privada protegida) |
+| `POST /api/auth/login` | – | Devuelve token de acceso o token pendiente de 2FA |
+| `POST /api/auth/2fa` | pendiente | Segundo paso con el código TOTP |
+| `POST /api/auth/renovar` · `/logout` | acceso | Renueva o revoca el token |
+| `GET /api/yo` | acceso | Mis claves (la clave privada ya protegida) |
+| `POST /api/2fa/configurar` · `/activar` · `/desactivar` | acceso | Gestión del 2FA |
+| `GET /api/usuarios` · `/api/usuarios/{u}/clavepublica` | acceso | Directorio y claves públicas |
+| `GET /api/archivos` | acceso | Mis archivos y los compartidos conmigo |
+| `POST /api/archivos` | acceso | Subir contenido cifrado (cabeceras `X-Nombre-Cifrado`, `X-Clave-Envuelta`) |
+| `GET /api/archivos/{id}/contenido` | acceso | Descargar el contenido cifrado |
+| `DELETE /api/archivos/{id}` | acceso | Borrar (propietario) o quitar de mi lista |
+| `POST /api/archivos/{id}/compartir` | acceso | Compartir (solo propietario) |
+| `DELETE /api/archivos/{id}/compartir/{u}` | acceso | Revocar (solo propietario) |
 
-**Compatibilidad:** el contenido cifrado ya no se guarda en Base64 dentro
-de `archivos.txt`. Las líneas del formato anterior se ignoran al leer; si
-tenías archivos cifrados con la versión antigua, descífralos antes de
-actualizar (o empieza con un `data/` limpio). Igualmente, si tienes un
-`data/usuarios.txt` de una versión con registro y el usuario `usuario` no
-existe en él, se creará uno nuevo con el password inicial; si ya existía
-con otro password, borra `data/` para empezar de cero.
+### 4.3 Clases principales
+| Clase | Responsabilidad |
+|---|---|
+| `cliente.crypto.Cripto` | SHA3-256, PBKDF-SHA3, AES-128-GCM, RSA-2048-OAEP |
+| `cliente.ClienteServicio` | Registro, login, 2FA, subir/descifrar/abrir, compartir (sin interfaz) |
+| `cliente.net.ApiClient` | Llamadas HTTP, token y renovación automática |
+| `cliente.gui.*` | Ventanas Swing |
+| `servidor.Api` | Rutas REST, permisos, anti-fuerza-bruta, revocación de tokens |
+| `servidor.Jwt` / `Totp` / `Cripto` | JWT HS256, TOTP RFC 6238, primitivas del servidor |
+| `servidor.Database` | Persistencia en `db.json` y `blobs/` |
 
-## Ampliación futura: Fase II
+### 4.4 Decisiones de diseño
+* **Una contraseña, dos claves**: el KDF produce 256 bits; la primera mitad autentica ante el servidor y la segunda protege la clave privada. El usuario solo escribe una contraseña.
+* **PBKDF propio con SHA3-256** (sal + 200 000 iteraciones), no PBKDF2.
+* **No se reencripta**: compartir solo envuelve de nuevo la clave del archivo con la clave pública del destinatario.
+* **AES-128-GCM** en lugar de CTR: sigue siendo AES-128 pero añade integridad.
+* **Tokens JWT** sin estado en el servidor, con caducidad y payload sin datos sensibles.
+* Detalle y notación completa en [`docs/SEGURIDAD.md`](docs/SEGURIDAD.md).
 
-Como la lógica criptográfica vive en `crypto/` y el almacenamiento en
-`storage/`, si más adelante quieres volver a MySQL (o cualquier otra BD)
-solo tendrías que sustituir las clases de `storage/`: `service/`, `gui/`
-y `Main` no cambian.
-
-Para la Fase II se añadirían a `CifradoService` el **alta y autenticación
-de varios usuarios** (volver a introducir un método de registro, que en la
-Fase I se eliminó a propósito) y el **compartir archivos** (entregar la
-clave AES `k_fi` cifrada con la clave pública del destinatario). Las dos
-interfaces lo reutilizarían.
+## 5. Pruebas
+`ejecutar-pruebas.bat` levanta un servidor real con TLS y ejecuta 39 comprobaciones de extremo a extremo: registro, login, 2FA con anti-repetición, cifrado, ausencia de datos en claro en el servidor, compartición sin reencriptar, revocación, permisos, tokens falsos o con `alg=none`, detección de manipulación y borrado.
