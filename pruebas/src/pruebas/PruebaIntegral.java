@@ -117,6 +117,7 @@ public class PruebaIntegral {
         System.out.println("\n-- Segundo factor (TOTP)");
         String[] cfg = alice.configurar2fa();
         comprobar("se entrega secreto y URI otpauth", cfg[0].length() >= 16 && cfg[1].startsWith("otpauth://totp/"));
+        comprobar("pedir configurar otra vez devuelve el MISMO secreto (la app sigue valida)", alice.configurar2fa()[0].equals(cfg[0]));
         comprobar("codigo incorrecto no activa el 2FA", estado(() -> alice.activar2fa("000000")) == 401);
         String codigo = totp(cfg[0], 0);
         alice.activar2fa(codigo);
@@ -131,8 +132,9 @@ public class PruebaIntegral {
         comprobar("reutilizar el mismo codigo se rechaza (anti-repeticion)", estado(() -> alice3.completar2fa(codigo)) == 401);
         ClienteServicio alice4 = new ClienteServicio(url);
         alice4.iniciarSesion("alice", "contrasena-de-alice");
-        alice4.completar2fa(totp(cfg[0], 1));
-        comprobar("login completo con 2FA y acceso a sus archivos", alice4.haySesion() && alice4.listar().size() == 1);
+        String c6 = totp(cfg[0], 1);
+        alice4.completar2fa(c6.substring(0, 3) + " " + c6.substring(3));   // como lo muestra Google Authenticator
+        comprobar("login completo con 2FA (codigo escrito con espacio) y acceso a sus archivos", alice4.haySesion() && alice4.listar().size() == 1);
 
         System.out.println("\n-- Tokens JWT");
         HttpClient http = HttpClient.newHttpClient();

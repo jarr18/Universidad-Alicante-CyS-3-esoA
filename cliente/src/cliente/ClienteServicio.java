@@ -71,6 +71,11 @@ public class ClienteServicio {
         return Base64.getDecoder().decode(s);
     }
 
+    /** "123 456" -> "123456" (Google Authenticator muestra el codigo con un espacio). */
+    static String soloDigitos(String codigo) {
+        return codigo == null ? "" : codigo.replaceAll("\\D", "");
+    }
+
     private void requiereSesion() {
         if (!haySesion()) throw new IllegalStateException("La sesion ha caducado. Vuelve a iniciar sesion.");
     }
@@ -117,7 +122,7 @@ public class ClienteServicio {
     /** Paso 2 del login (solo con 2FA activado). */
     public void completar2fa(String codigo) {
         if (mitadCifradoPendiente == null) throw new IllegalStateException("No hay un inicio de sesion pendiente");
-        Map<String, Object> r = api.objeto("POST", "/api/auth/2fa", Json.obj("codigo", codigo));
+        Map<String, Object> r = api.objeto("POST", "/api/auth/2fa", Json.obj("codigo", soloDigitos(codigo)));
         api.setToken(Json.str(r, "token"), Json.num(r, "expiraEn", 1800));
         byte[] m = mitadCifradoPendiente;
         mitadCifradoPendiente = null;
@@ -168,12 +173,12 @@ public class ClienteServicio {
 
     public void activar2fa(String codigo) {
         requiereSesion();
-        api.objeto("POST", "/api/2fa/activar", Json.obj("codigo", codigo));
+        api.objeto("POST", "/api/2fa/activar", Json.obj("codigo", soloDigitos(codigo)));
     }
 
     public void desactivar2fa(String codigo) {
         requiereSesion();
-        api.objeto("POST", "/api/2fa/desactivar", Json.obj("codigo", codigo));
+        api.objeto("POST", "/api/2fa/desactivar", Json.obj("codigo", soloDigitos(codigo)));
     }
 
     // -------------------------------------------------------------- archivos

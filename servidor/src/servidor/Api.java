@@ -38,6 +38,7 @@ final class Api implements HttpHandler {
     static final long MAX_JSON = 1L << 20;
     static final int MAX_FALLOS = 5;
     static final long BLOQUEO_MS = 60_000;
+    static final String MSG_2FA = "Codigo 2FA incorrecto. Comprueba que lo has escrito bien y que la hora de tu ordenador y la de tu movil estan sincronizadas (maximo 30 s de diferencia).";
     static final Pattern NOMBRE_USUARIO = Pattern.compile("^[A-Za-z0-9_.-]{3,32}$");
 
     enum Auth { NINGUNA, ACCESO, PENDIENTE_2FA }
@@ -353,7 +354,7 @@ final class Api implements HttpHandler {
         long paso = verificarCodigo(u, Json.str(b, "codigo"));
         if (paso < 0) {
             registrarFallo(c.usuario);
-            throw new ApiError(401, "Codigo 2FA incorrecto");
+            throw new ApiError(401, MSG_2FA);
         }
         intentos.remove(c.usuario);
         u.totpUltimoPaso = paso;
@@ -362,11 +363,15 @@ final class Api implements HttpHandler {
         c.responder(200, Json.obj("token", crearToken(c.usuario, "acceso", TTL_ACCESO_S), "expiraEn", TTL_ACCESO_S));
     }
 
-    private long verificarCodigo(Database.Usuario u, String codigo) {
-        if (u.totpSecretoCifrado == null) return -1;
-        String secreto = new String(Cripto.descifrarGcm(Cripto.deB64(u.totpSecretoCifrado), claveDatos,
+    private String secretoDe(Database.Usuario u) {
+        return new String(Cripto.descifrarGcm(Cripto.deB64(u.totpSecretoCifrado), claveDatos,
                 u.nombre.getBytes(StandardCharsets.UTF_8)), StandardCharsets.US_ASCII);
-        return Totp.verificar(secreto, codigo, u.totpUltimoPaso);
+    }
+
+    private long verificarCodigo(Database.Usuario u, String codigo) {
+        if (u.totpSecretoCifrado == null || codigo == null) return -1;
+        // Google Authenticator muestra "123 456": se aceptan espacios y guiones
+        return Totp.verificar(secretoDe(u), codigo.replaceAll("[\\s-]", ""), u.totpUltimoPaso);
     }
 
     private void renovar(Ctx c) throws Exception {
@@ -391,11 +396,18 @@ final class Api implements HttpHandler {
     private void configurar2fa(Ctx c) throws Exception {
         Database.Usuario u = db.usuario(c.usuario);
         if (u.totpActivo) throw new ApiError(409, "El 2FA ya esta activado");
-        String secreto = Totp.nuevoSecreto();
-        u.totpSecretoCifrado = Cripto.b64(Cripto.cifrarGcm(secreto.getBytes(StandardCharsets.US_ASCII), claveDatos,
-                u.nombre.getBytes(StandardCharsets.UTF_8)));
-        u.totpUltimoPaso = 0;
-        db.actualizarUsuario();
+        String secreto;
+        if (u.totpSecretoCifrado != null) {
+            // Ya hay un secreto pendiente de confirmar: se devuelve el MISMO para que la cuenta ya
+            // anadida en la app de autenticacion siga siendo valida si el usuario vuelve a abrir el dialogo.
+            secreto = secretoDe(u);
+        } else {
+            secreto = Totp.nuevoSecreto();
+            u.totpSecretoCifrado = Cripto.b64(Cripto.cifrarGcm(secreto.getBytes(StandardCharsets.US_ASCII), claveDatos,
+                    u.nombre.getBytes(StandardCharsets.UTF_8)));
+            u.totpUltimoPaso = 0;
+            db.actualizarUsuario();
+        }
         c.responder(200, Json.obj("secreto", secreto, "uri", Totp.uri(u.nombre, secreto)));
     }
 
@@ -407,7 +419,7 @@ final class Api implements HttpHandler {
         long paso = verificarCodigo(u, Json.str(b, "codigo"));
         if (paso < 0) {
             registrarFallo(c.usuario);
-            throw new ApiError(401, "Codigo 2FA incorrecto");
+            throw new ApiError(401, MSG_2FA);
         }
         u.totpActivo = true;
         u.totpUltimoPaso = paso;
@@ -423,7 +435,7 @@ final class Api implements HttpHandler {
         long paso = verificarCodigo(u, Json.str(b, "codigo"));
         if (paso < 0) {
             registrarFallo(c.usuario);
-            throw new ApiError(401, "Codigo 2FA incorrecto");
+            throw new ApiError(401, MSG_2FA);
         }
         u.totpActivo = false;
         u.totpSecretoCifrado = null;

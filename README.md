@@ -10,7 +10,7 @@ Sistema **cliente–servidor** para guardar archivos multimedia cifrados, con us
 | `servidor/` | Servidor REST (separado del cliente): usuarios, JWT, 2FA, almacén de blobs cifrados |
 | `cliente/` | Aplicación de escritorio (Swing) y toda la criptografía de cliente |
 | `comun/` | JSON mínimo compartido por ambos |
-| `pruebas/` | Prueba de integración automática (39 comprobaciones) y generador de capturas |
+| `pruebas/` | Prueba de integración automática (40 comprobaciones) y generador de capturas |
 | `docs/SEGURIDAD.md` | Capítulo de seguridad con la notación explicada |
 | `docs/capturas/` | Capturas reales de la aplicación |
 | `fase1/` | Código de la Fase I (un solo usuario) |
@@ -77,6 +77,7 @@ Desde ese momento, al iniciar sesión se te pedirá también el código. Para de
 |---|---|
 | «No se pudo conectar con el servidor» | El servidor no está arrancado o la dirección es incorrecta |
 | «Usuario o contraseña incorrectos» | Revisa ambos datos; tras 5 fallos hay que esperar 1 minuto |
+| «Código 2FA incorrecto» | 1) La **hora** del ordenador y la del móvil deben estar sincronizadas (máx. 30 s de diferencia). 2) La cuenta de tu app debe corresponder a la clave que muestra **ahora** el diálogo: si dudas, borra la cuenta «CyS-Fase2» de la app y vuelve a añadirla con la clave actual. 3) El código se puede escribir con o sin espacio |
 | «La sesión ha caducado» | Han pasado más de 30 min sin actividad: inicia sesión de nuevo |
 | Error de certificado | Ejecuta el cliente con `ejecutar-cliente.bat` (usa el almacén `certs/truststore.p12`) |
 
@@ -134,4 +135,4 @@ Desde ese momento, al iniciar sesión se te pedirá también el código. Para de
 * Detalle y notación completa en [`docs/SEGURIDAD.md`](docs/SEGURIDAD.md).
 
 ## 5. Pruebas
-`ejecutar-pruebas.bat` levanta un servidor real con TLS y ejecuta 39 comprobaciones de extremo a extremo: registro, login, 2FA con anti-repetición, cifrado, ausencia de datos en claro en el servidor, compartición sin reencriptar, revocación, permisos, tokens falsos o con `alg=none`, detección de manipulación y borrado.
+`ejecutar-pruebas.bat` levanta un servidor real con TLS y ejecuta 40 comprobaciones de extremo a extremo: registro, login, 2FA con anti-repetición, cifrado, ausencia de datos en claro en el servidor, compartición sin reencriptar, revocación, permisos, tokens falsos o con `alg=none`, detección de manipulación y borrado.
